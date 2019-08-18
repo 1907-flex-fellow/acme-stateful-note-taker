@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>notes taker</title>
+    <script src="https://unpkg.com/react@16/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@16/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/axios/0.19.0/axios.js'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/react-router-dom/5.0.1/react-router-dom.js'></script>
+    <script src='fetchUser.js'></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id='root'></div>
+    <script type='text/babel'>     
+        const { render } = ReactDOM;
+        const { Component } = React;
+        const { HashRouter, Route, Link, Redirect, Switch} = ReactRouterDOM;
+        const Nav = ({notes}) => {
+            if(!notes.length){return null}
+            return(
+                <nav>
+                    <div>
+                    <Link to='/notes'>{`Notes(${notes.filter(_note=>!_note.archived).length})`}</Link>
+                    <Link to='/notes/create'>Create</Link>
+                    <Link to='/archived'>{`Archived(${notes.filter(note=>note.archived).length})`}</Link>
+                    </div>
+                    <h1>Acme Note -- taker for Marjory Spencer</h1>
+                </nav>
+            )
+        }
+
+        const Notes = ({notes, archived, update, destory}) => {
+            if(!notes.length){return null}
+            if(!archived){
+                return(
+                <ul>{
+                    notes.filter(_note=>!_note.archived).map((note, idx)=>(
+                        <li key={idx}>
+                            <div>{note.text}</div>
+                            <button onClick={()=>update({...note, archived: !note.archived})}>archive</button>
+                            <button onClick={()=>destory(note)}>destory</button>
+                        </li>
+                        ))
+                }</ul>
+             )
+            }else{
+                return(
+                <ul>{
+                    notes.filter(_note=>_note.archived).map((note, idx)=>(
+                        <li key={idx}>
+                            <div>{note.text}</div>
+                            <button onClick={()=>update({...note, archived: !note.archived})}>unarchive</button>
+                            <button onClick={()=>destory(note)}>destory</button>
+                        </li>
+                        ))
+                }</ul>
+             )
+            }
+            
+            
+        }
+
+        class Create extends Component{
+            constructor(){
+                super()
+                this.state = {
+                    text: '',
+                    error: ''
+                }
+                this.onChange = this.onChange.bind(this)
+                this.onCreate = this.onCreate.bind(this)
+            }
+            
+            onChange = (ev) =>  {
+                this.setState({text: ev.target.value})
+            }
+            
+            onCreate = (ev) => {
+                this.props.create({text: this.state.text})
+                    .then(()=>this.props.history.push('/notes'))
+                    .catch(ex=>this.setState({error: ex.response.data.message}))
+                
+            }
+
+            render(){
+                const {text, error} = this.state
+                const {onChange, onCreate} = this
+                return(
+                    <div>
+                        <form onSubmit={ev=>ev.preventDefault()}>
+                        { !!error && <div className='error'>{error }</div>  }
+                        <input value = {text} onChange={(ev)=>onChange(ev)}/>
+                        <button onClick={onCreate}>Create</button>
+                        </form>
+                    </div>
+                )
+            }
+        }
+
+
+        class App extends Component{
+            constructor(){
+                super();
+                this.state = {
+                    notes: [],
+                    user: {}
+                }
+                this.create = this.create.bind(this)
+                this.update = this.update.bind(this)
+                this.destory = this.destory.bind(this)
+            }
+            async componentDidMount(){
+                const user = await fetchUser();
+                const notes = (await axios.get(`${API}/users/${user.id}/notes`)).data
+                this.setState({notes, user})
+            }
+
+            async create(note){
+                const newNote = (await axios.post(`${API}/users/${this.state.user.id}/notes`, note)).data
+                this.setState({notes: [...this.state.notes, newNote]})
+            }
+
+            async update(note){
+                const newNote = (await axios.put(`${API}/users/${this.state.user.id}/notes/${note.id}`, {archived: note.archived, text: note.text})).data
+                console.log('newNote: ', newNote)
+                const updatedNotes = [...this.state.notes].map(note=>{
+                    if(note.id === newNote.id){
+                        return {...newNote}
+                    }else{
+                        return {...note}
+                    }
+                }) 
+                this.setState({notes: updatedNotes})
+            }
+
+            async destory(note){
+                await axios.delete(`${API}/users/${this.state.user.id}/notes/${note.id}`)
+                const updatedNotes = [...this.state.notes].filter(_note=>_note.id !== note.id)
+                this.setState({notes: updatedNotes})  
+            }
+
+            render(){
+                const { notes, user } = this.state;
+                const { create, destory, update } = this
+                return(
+                    <div>
+                        <HashRouter>
+                            <Route render={ ()=><Nav notes={notes}/>} />
+                            <Switch>
+                                <Route exact path='/notes' render={ 
+                                    () => <Notes notes={notes} destory={destory} update={update} archived={false} />
+                                }/>
+                                <Route exact path='/notes/create' render={ ({history}) => <Create create={create} history={history}/>}/>
+                                <Route exact path='/archived' render={()=><Notes notes={notes} archived={true} destory={destory} update={update}/>}/>
+                            </Switch>
+                        </HashRouter>
+                    </div>
+                )
+            }
+        }
+
+        const root = document.querySelector('#root');
+        render(<App />, root);
+    </script>
+</body>
+</html>

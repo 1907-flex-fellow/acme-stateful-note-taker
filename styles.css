@@ -1,0 +1,10 @@
+nav {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+}
+
+nav > div{
+    display: flex;
+    justify-content: space-around;
+}
